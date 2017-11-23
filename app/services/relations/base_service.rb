@@ -55,6 +55,14 @@ class Relations::BaseService
     result
   end
 
+  def set_defaults(relation)
+    if Relation::TYPE_FOLLOWS == relation.relation_type
+      relation.delay ||= 0
+    else
+      relation.delay = nil
+    end
+  end
+
   def initialize_contract!(relation)
     self.contract = self.class.contract.new relation, user
   end

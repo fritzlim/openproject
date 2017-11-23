@@ -98,7 +98,6 @@ class Relation < ActiveRecord::Base
   before_validation :reverse_if_needed
 
   before_save :set_type_column
-  before_save :update_schedule
 
   def self.relation_column(type)
     if TYPES.key?(type) && TYPES[type][:reverse]
@@ -183,25 +182,9 @@ class Relation < ActiveRecord::Base
     TYPES[relation_type] ? TYPES[relation_type][key] : :unknown
   end
 
-  def update_schedule
-    if TYPE_FOLLOWS == relation_type
-      self.delay ||= 0
-    else
-      self.delay = nil
-    end
-    #set_dates_of_target
-  end
-
-  #def set_dates_of_target
-  #  soonest_start = successor_soonest_start
-  #  if soonest_start && from
-  #    from.reschedule_after(soonest_start)
-  #  end
-  #end
-
   def successor_soonest_start
     if relation_type == TYPE_FOLLOWS && (to.start_date || to.due_date)
-      (to.due_date || to.start_date) + 1 + delay
+      (to.due_date || to.start_date) + 1 + (delay || 0)
     end
   end
 
