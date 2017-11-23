@@ -98,6 +98,29 @@ module WorkPackages
                 model.leaf?
               }
 
+    validates :start_date, date: { allow_blank: true }
+    validates :due_date,
+              date: { after_or_equal_to: :start_date,
+                      message: :greater_than_or_equal_to_start_date,
+                      allow_blank: true },
+              unless: Proc.new { |wp| wp.start_date.blank? }
+    validates :due_date, date: { allow_blank: true }
+    validate :validate_enabled_type
+
+    validate :validate_milestone_constraint
+    validate :validate_parent_not_milestone
+
+    validate :validate_parent_exists
+    validate :validate_parent_in_same_project
+    validate :validate_parent_not_subtask
+
+    validate :validate_status_transition
+
+    validate :validate_active_priority
+
+    validate :validate_category
+    validate :validate_estimated_hours
+
     def initialize(work_package, user)
       super(work_package)
 
@@ -113,6 +136,86 @@ module WorkPackages
 
     attr_reader :user,
                 :can
+
+    def validate_estimated_hours
+      if !model.estimated_hours.nil? && model.estimated_hours < 0
+        errors.add :estimated_hours, :only_values_greater_or_equal_zeroes_allowed
+      end
+    end
+
+    def status_changed?
+      model.status_id_was != 0 && model.status_id_changed?
+    end
+
+    def status_exists?
+      model.status_id && Status.where(id: status_id).exists?
+    end
+
+    def status_transition_exists?
+      model.type.valid_transition?(status_id_was, status_id, User.current.roles(project))
+    end
+
+    def validate_enabled_type
+      # Checks that the issue can not be added/moved to a disabled type
+      if model.project && (model.type_id_changed? || model.project_id_changed?)
+        errors.add :type_id, :inclusion unless model.project.types.include?(model.type)
+      end
+    end
+
+    def validate_milestone_constraint
+      if model.is_milestone? && model.due_date && model.start_date && model.start_date != model.due_date
+        errors.add :due_date, :not_start_date
+      end
+    end
+
+    def validate_parent_not_milestone
+      if model.parent && model.parent.is_milestone?
+        errors.add :parent, :cannot_be_milestone
+      end
+    end
+
+    def validate_parent_exists
+      if model.parent &&
+         model.parent.is_a?(WorkPackage::InexistentWorkPackage)
+
+        errors.add :parent, :does_not_exist
+      end
+    end
+
+    def validate_parent_in_same_project
+      if parent_in_different_project?
+        errors.add :parent, :cannot_be_in_another_project
+      end
+    end
+
+    # have to validate ourself as the parent relation is created after saving
+    def validate_parent_not_subtask
+      if model.parent &&
+         model.descendants.include?(model.parent)
+
+        errors.add :parent, :cant_link_a_work_package_with_a_descendant
+      end
+    end
+
+    def validate_status_transition
+      if status_changed? && status_exists? && !(model.type_id_changed? || status_transition_exists?)
+        errors.add :status_id, :status_transition_invalid
+      end
+    end
+
+    def validate_active_priority
+      if model.priority && !model.priority.active? && model.changes[:priority_id]
+        errors.add :priority_id, :only_active_priorities_allowed
+      end
+    end
+
+    def validate_category
+      if inexistent_category?
+        errors.add :category, :does_not_exist
+      elsif category_not_of_project?
+        errors.add :category, :only_same_project_categories_allowed
+      end
+    end
 
     def validate_fixed_version_is_assignable
       if model.fixed_version_id && !model.assignable_versions.map(&:id).include?(model.fixed_version_id)
@@ -150,6 +253,21 @@ module WorkPackages
       model.start_date &&
         model.soonest_start &&
         model.start_date < model.soonest_start
+    end
+
+    def parent_in_different_project?
+      model.parent &&
+        model.parent.project != model.project &&
+        !Setting.cross_project_work_package_relations? &&
+        !model.parent.is_a?(WorkPackage::InexistentWorkPackage)
+    end
+
+    def inexistent_category?
+      model.category_id.present? && !model.category
+    end
+
+    def category_not_of_project?
+      model.category && !model.project.categories.include?(model.category)
     end
   end
 end

@@ -30,30 +30,38 @@ require 'spec_helper'
 
 describe WorkPackages::BaseContract do
   let(:work_package) do
-    FactoryGirl.create(:work_package,
-                       done_ratio: 50,
-                       estimated_hours: 6.0,
-                       project: project)
+    FactoryGirl.build_stubbed(:stubbed_work_package,
+                              type: type,
+                              done_ratio: 50,
+                              estimated_hours: 6.0,
+                              project: project)
   end
-  let(:stubbed_type) { FactoryGirl.build_stubbed(:type) }
-  let(:stubbed_work_package) do
-    FactoryGirl.build_stubbed(:stubbed_work_package, type: stubbed_type)
+  let(:type) { FactoryGirl.build_stubbed(:type) }
+  let(:member) do
+    u = FactoryGirl.build_stubbed(:user)
+
+    permissions.each do |permission|
+      allow(u)
+        .to receive(:allowed_to?)
+        .with(permission, project)
+        .and_return(true)
+    end
+
+    u
   end
-  let(:member) { FactoryGirl.create(:user, member_in_project: project, member_through_role: role) }
-  let(:project) { FactoryGirl.create(:project) }
+  let(:project) { FactoryGirl.build_stubbed(:project) }
   let(:current_user) { member }
   let(:permissions) do
-    [
-      :view_work_packages,
-      :view_work_package_watchers,
-      :edit_work_packages,
-      :add_work_package_watchers,
-      :delete_work_package_watchers,
-      :manage_work_package_relations,
-      :add_work_package_notes
-    ]
+    %i(
+      view_work_packages
+      view_work_package_watchers
+      edit_work_packages
+      add_work_package_watchers
+      delete_work_package_watchers
+      manage_work_package_relations
+      add_work_package_notes
+    )
   end
-  let(:role) { FactoryGirl.create :role, permissions: permissions }
   let(:changed_values) { [] }
 
   subject(:contract) { described_class.new(work_package, current_user) }
@@ -85,6 +93,10 @@ describe WorkPackages::BaseContract do
   shared_examples 'a parent unwritable property' do |attribute|
     context 'is no parent' do
       before do
+        allow(work_package)
+          .to receive(:leaf?)
+          .and_return(true)
+
         contract.validate
       end
 
@@ -103,12 +115,10 @@ describe WorkPackages::BaseContract do
 
     context 'is a parent' do
       before do
-        child
-        work_package.reload
+        allow(work_package)
+          .to receive(:leaf?)
+          .and_return(false)
         contract.validate
-      end
-      let(:child) do
-        FactoryGirl.create(:work_package, parent: work_package, project: project)
       end
 
       context 'has not changed' do
@@ -183,20 +193,20 @@ describe WorkPackages::BaseContract do
   end
 
   describe 'fixed_version' do
-    subject(:contract) { described_class.new(stubbed_work_package, current_user) }
+    subject(:contract) { described_class.new(work_package, current_user) }
 
     let(:assignable_version) { FactoryGirl.build_stubbed(:version) }
     let(:invalid_version) { FactoryGirl.build_stubbed(:version) }
 
     before do
-      allow(stubbed_work_package)
+      allow(work_package)
         .to receive(:assignable_versions)
         .and_return [assignable_version]
     end
 
     context 'for assignable version' do
       before do
-        stubbed_work_package.fixed_version = assignable_version
+        work_package.fixed_version = assignable_version
         subject.validate
       end
 
@@ -207,7 +217,7 @@ describe WorkPackages::BaseContract do
 
     context 'for non assignable version' do
       before do
-        stubbed_work_package.fixed_version = invalid_version
+        work_package.fixed_version = invalid_version
         subject.validate
       end
 
@@ -221,11 +231,11 @@ describe WorkPackages::BaseContract do
 
       context 'when reopening a work package' do
         before do
-          allow(stubbed_work_package)
+          allow(work_package)
             .to receive(:reopened?)
             .and_return(true)
 
-          stubbed_work_package.fixed_version = assignable_version
+          work_package.fixed_version = assignable_version
           subject.validate
         end
 
@@ -236,7 +246,7 @@ describe WorkPackages::BaseContract do
 
       context 'when not reopening the work package' do
         before do
-          stubbed_work_package.fixed_version = assignable_version
+          work_package.fixed_version = assignable_version
           subject.validate
         end
 
