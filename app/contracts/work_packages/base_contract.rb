@@ -152,7 +152,9 @@ module WorkPackages
     end
 
     def status_transition_exists?
-      model.type.valid_transition?(status_id_was, status_id, User.current.roles(project))
+      model.type.valid_transition?(model.status_id_was,
+                                   model.status_id,
+                                   user.roles(model.project))
     end
 
     def validate_enabled_type
