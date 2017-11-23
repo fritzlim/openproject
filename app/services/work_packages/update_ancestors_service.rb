@@ -76,7 +76,7 @@ class WorkPackages::UpdateAncestorsService
   def inherit_attributes(ancestor, attributes)
     return unless attributes_justify_inheritance?(attributes)
 
-    leaves = ancestor.leaves.select(:done_ratio, :estimated_hours, :status_id).includes(:status).to_a
+    leaves = ancestor.leaves.select(selected_leaf_attributes).includes(:status).to_a
 
     inherit_done_ratio(ancestor, leaves)
 
@@ -167,5 +167,9 @@ class WorkPackages::UpdateAncestorsService
 
   def attributes_justify_inheritance?(attributes)
     (%i(estimated_hours done_ratio parent parent_id status status_id) & attributes).any?
+  end
+
+  def selected_leaf_attributes
+    %i(done_ratio estimated_hours status_id)
   end
 end
