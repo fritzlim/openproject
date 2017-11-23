@@ -627,7 +627,7 @@ describe Api::V2::PlanningElementsController, type: :controller do
       def expect_redirect_to
         Regexp.new(api_v2_project_planning_elements_path(project))
       end
-      let(:permission) { :edit_work_packages }
+      let(:permission) { :add_work_packages }
 
       it_should_behave_like 'a controller action which needs project permissions'
     end
@@ -820,7 +820,7 @@ describe Api::V2::PlanningElementsController, type: :controller do
       def expect_no_content
         true
       end
-      let(:permission) { :edit_work_packages }
+      let(:permission) { %i(edit_work_packages view_work_packages) }
       it_should_behave_like 'a controller action which needs project permissions'
     end
 
