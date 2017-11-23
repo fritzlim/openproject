@@ -610,25 +610,28 @@ class Project < ActiveRecord::Base
   #
   # Supports the :include option.
   def all_work_package_custom_fields(options = {})
-    @all_work_package_custom_fields ||= (
-      WorkPackageCustomField.for_all(options) + (
-        if options.include? :include
-          WorkPackageCustomField.joins(:projects)
-            .where(projects: { id: id })
-            .includes(options[:include]) # use #preload instead of #includes if join gets too big
-        else
-          work_package_custom_fields
-        end
-      )
-    ).uniq.sort
+    @all_work_package_custom_fields ||= begin
+      for_all = WorkPackageCustomField
+                .where(is_for_all: true)
+                .joins(:projects)
+                .references(:projects)
+
+      for_project = WorkPackageCustomField
+                    .joins(:projects)
+                    .where(projects: { id: id })
+
+      for_all
+        .or(for_project)
+        .order(:position)
+    end
   end
 
   def project
     self
   end
 
-  def <=>(project)
-    name.downcase <=> project.name.downcase
+  def <=>(other)
+    name.downcase <=> other.name.downcase
   end
 
   def to_s
