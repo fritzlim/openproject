@@ -1018,11 +1018,9 @@ describe WorkPackage, type: :model do
 
   describe 'changed_since' do
     let!(:work_package) do
-      work_package = Timecop.travel(5.hours.ago) {
-        wp = FactoryGirl.create(:work_package)
-        wp.save!
-        wp
-      }
+      Timecop.travel(5.hours.ago) do
+        FactoryGirl.create(:work_package)
+      end
     end
 
     describe 'null' do
@@ -1038,7 +1036,7 @@ describe WorkPackage, type: :model do
     end
 
     describe 'work package update' do
-      subject { WorkPackage.changed_since(work_package.updated_at) }
+      subject { WorkPackage.changed_since(work_package.reload.updated_at) }
 
       it { expect(subject).to match_array([work_package]) }
     end

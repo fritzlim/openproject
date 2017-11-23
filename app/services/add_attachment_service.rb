@@ -53,8 +53,11 @@ class AddAttachmentService
 
   def save(attachment)
     ActiveRecord::Base.transaction do
-      container.attachments << attachment
+      attachment.save!
+
       if container.respond_to? :add_journal
+        # reload to get the newly added attachment
+        container.attachments.reload
         container.add_journal author
         container.save!
       end
