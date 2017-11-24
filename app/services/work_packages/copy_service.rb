@@ -72,10 +72,14 @@ class WorkPackages::CopyService
   def copied_attributes(wp, override)
     wp
       .attributes
-      .except('id', 'updated_at', 'created_at')
+      .slice(*writable_work_package_attributes(wp))
       .merge('author_id' => user.id,
              'parent_id' => wp.parent_id)
       .merge(override)
+  end
+
+  def writable_work_package_attributes(wp)
+    contract.new(wp, user).writable_attributes
   end
 
   def copy_watchers(copied)
