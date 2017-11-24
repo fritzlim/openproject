@@ -43,7 +43,7 @@ class WorkPackages::UpdateAncestorsService
 
     set_journal_note(modified)
 
-    result = ServiceResult.new(success: modified.all?(&:save),
+    result = ServiceResult.new(success: modified.all? { |wp| wp.save(validate: false) },
                                result: work_package)
 
     modified.each do |wp|

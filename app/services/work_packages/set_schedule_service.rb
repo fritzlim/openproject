@@ -90,8 +90,6 @@ class WorkPackages::SetScheduleService
   #  - their descendants if they are parents
   #  - their predecessors (or predecessors of their ancestors) if they are leaves
   def reschedule(scheduled, dependency)
-    #to_schedule = schedule.work_package
-
     if dependency.descendants.any?
       reschedule_ancestor(scheduled, dependency)
     else
@@ -118,14 +116,16 @@ class WorkPackages::SetScheduleService
   #    ancestors limits moving it. Then it is moved to the earliest date possible. This limitation is propagated transtitively
   #    to all following work packages.
   def reschedule_by_follows(scheduled, dependency)
-    # TODO: move into schedule dependency
     delta = if dependency.follows_moved.first
               date_rescheduling_delta(dependency.follows_moved.first.to)
             else
               0
             end
 
-    unless delta.zero?
+    if delta.zero? && dependency.max_date_of_followed
+      scheduled.due_date = dependency.max_date_of_followed + scheduled.duration
+      scheduled.start_date = dependency.max_date_of_followed
+    elsif !delta.zero?
       required_delta = [dependency.max_date_of_followed - scheduled.start_date, [delta, 0].min].max
 
       scheduled.start_date += required_delta

@@ -33,8 +33,9 @@ require 'spec_helper'
 describe WorkPackages::SetScheduleService do
   let(:work_package) do
     FactoryGirl.build_stubbed(:stubbed_work_package,
-                              due_date: Date.today)
+                              due_date: work_package_due_date)
   end
+  let(:work_package_due_date) { Date.today }
   let(:instance) do
     described_class.new(user: user, work_package: work_package)
   end
@@ -43,6 +44,7 @@ describe WorkPackages::SetScheduleService do
   end
   let(:user) { FactoryGirl.build_stubbed(:user) }
   let(:type) { FactoryGirl.build_stubbed(:type) }
+
   def stub_follower(start_date, due_date, predecessors)
     work_package = FactoryGirl.build_stubbed(:stubbed_work_package,
                                              type: type,
@@ -345,6 +347,54 @@ describe WorkPackages::SetScheduleService do
       it_behaves_like 'reschedules' do
         let(:expected) do
           { following_work_package1 => [follower1_start_date, follower1_due_date] }
+        end
+        let(:unchanged) do
+          [following_work_package1]
+        end
+      end
+    end
+
+    context 'not moving and the successor not having start & due date (e.g. creating relation)' do
+      let(:follower1_start_date) { nil }
+      let(:follower1_due_date) { nil }
+
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [work_package.due_date + 1.day, work_package.due_date + 2.day] }
+        end
+      end
+    end
+
+    context 'not moving and the successor having start before predecessor due date (e.g. creating relation)' do
+      let(:follower1_start_date) { work_package_due_date - 5.days }
+      let(:follower1_due_date) { nil }
+
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [work_package.due_date + 1.day, work_package.due_date + 2.day] }
+        end
+      end
+    end
+
+    context 'not moving and the successor having start and due before predecessor due date (e.g. creating relation)' do
+      let(:follower1_start_date) { work_package_due_date - 5.days }
+      let(:follower1_due_date) { work_package_due_date - 2.days }
+
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [work_package.due_date + 1.day, work_package.due_date + 5.day] }
+        end
+      end
+    end
+
+    context 'not having dates and the successor not having start & due date (e.g. creating relation)' do
+      let(:work_package_due_date) { nil }
+      let(:follower1_start_date) { nil }
+      let(:follower1_due_date) { nil }
+
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [nil, nil] }
         end
         let(:unchanged) do
           [following_work_package1]

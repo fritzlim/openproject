@@ -35,7 +35,6 @@ class Relations::CreateService < Relations::BaseService
     @user = user
   end
 
-  # TODO: change into the service requiring only attributes
   def call(relation, send_notifications: true)
     initialize_contract! relation
 

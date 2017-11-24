@@ -69,9 +69,8 @@ class WorkPackages::UpdateService
   def save_if_valid(result)
     if result.success?
       # TODO: check for optimization (don't validate all?)
-      unless result.all_results.all?(&:save)
-        result.success = false
-      end
+      # TODO: find out why there are duplicates in here
+      result.success = result.all_results.all? { |wp| wp.save(validate: false) }
     end
 
     result.success?
