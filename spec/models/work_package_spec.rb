@@ -142,45 +142,6 @@ describe WorkPackage, type: :model do
     end
   end
 
-  describe '#type' do
-    context 'disabled type' do
-      describe 'allows work package update' do
-        before do
-          work_package.save!
-
-          project.types.delete work_package.type
-
-          work_package.reload
-          work_package.subject = 'New subject'
-        end
-
-        subject { work_package.save }
-
-        it { is_expected.to be_truthy }
-      end
-
-      describe 'must not be set on work package' do
-        before do
-          project.types.delete work_package.type
-        end
-
-        context 'save' do
-          subject { work_package.save }
-
-          it { is_expected.to be_falsey }
-        end
-
-        context 'errors' do
-          before { work_package.save }
-
-          subject { work_package.errors[:type_id] }
-
-          it { is_expected.not_to be_empty }
-        end
-      end
-    end
-  end
-
   describe '#category' do
     let(:user_2) { FactoryGirl.create(:user, member_in_project: project) }
     let(:category) do
@@ -903,58 +864,6 @@ describe WorkPackage, type: :model do
 
       it 'should have a duration of one' do
         expect(work_package.duration).to eq(1)
-      end
-    end
-
-    describe "w/o a start date
-              w an erroneous due date" do
-      before do
-        work_package.start_date = nil
-        work_package.due_date = '856742858941748214577'
-        work_package.valid?
-      end
-
-      it 'should have a validation error' do
-        expect(work_package.errors[:due_date].size).to eq(1)
-      end
-    end
-  end
-
-  describe '#inherit_done_ratio_from_leaves' do
-    describe 'with done ratio disabled' do
-      let(:project) { FactoryGirl.create(:project) }
-      let(:work_package) { FactoryGirl.create(:work_package, project: project) }
-      let(:child) {
-        FactoryGirl.create(:work_package, parent: work_package,
-                                          project: project)
-      }
-      let(:closed_status) { FactoryGirl.create(:closed_status) }
-      let!(:workflow) {
-        FactoryGirl.create(:workflow,
-                           old_status: child.status,
-                           new_status: closed_status,
-                           type_id: child.type_id)
-      }
-      let(:user) {
-        FactoryGirl.create(:user,
-                           member_in_project: project,
-                           member_through_role: workflow.role)
-      }
-
-      before do
-        allow(Setting).to receive(:work_package_done_ratio).and_return('disabled')
-
-        login_as(user)
-      end
-
-      it 'should not update the work package done_ratio' do
-        expect(work_package.done_ratio).to eq(0)
-
-        child.status = closed_status
-        child.save!
-
-        work_package.reload
-        expect(work_package.done_ratio).to eq(0)
       end
     end
   end

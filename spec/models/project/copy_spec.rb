@@ -196,8 +196,18 @@ describe Project::Copy, type: :model do
                      .reverse
                      .first
 
-          expect(child_wp).not_to eq(nil)
-          expect(child_wp.parent.project).to eq(copy)
+          grandparent_wp_copy = copy.work_packages.find_by(subject: work_package3.subject)
+          parent_wp_copy = copy.work_packages.find_by(subject: work_package2.subject)
+          child_wp_copy = copy.work_packages.find_by(subject: work_package.subject)
+
+          [grandparent_wp_copy,
+           parent_wp_copy,
+           child_wp_copy].each do |wp|
+            expect(wp).to be_present
+          end
+
+          expect(child_wp_copy.parent).to eq(parent_wp_copy)
+          expect(parent_wp_copy.parent).to eq(grandparent_wp_copy)
         end
       end
 

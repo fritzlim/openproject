@@ -73,8 +73,6 @@ class WorkPackages::SetAttributesService
   end
 
   def set_default_attributes
-    #work_package.status ||= Status.default
-    # TODO: move available priorities to contract
     work_package.priority ||= IssuePriority.active.default
     work_package.author ||= user
     work_package.status ||= Status.default
@@ -119,27 +117,18 @@ class WorkPackages::SetAttributesService
   def reassign_type
     available_types = work_package.project.types.order(:position)
 
-    if available_types.include?(work_package.type) && work_package.type
-      return
-    elsif available_types.any?(&:is_default)
-      work_package.type = available_types.detect(&:is_default)
-    else
-      work_package.type = available_types.first
-    end
+    return if available_types.include?(work_package.type) && work_package.type
+
+    work_package.type = available_types.detect(&:is_default) || available_types.first
 
     reassign_status
   end
 
   def reassign_status
-    # TODO: move new_statuses_allowed_to into contract
     available_statuses = work_package.new_statuses_allowed_to(user, true)
 
-    if available_statuses.include? work_package.status
-      return
-    elsif available_statuses.any?(&:is_default)
-      work_package.status = available_statuses.detect(&:is_default)
-    else
-      work_package.status = available_statuses.first
-    end
+    return if available_statuses.include? work_package.status
+
+    work_package.status = available_statuses.detect(&:is_default) || available_statuses.first
   end
 end

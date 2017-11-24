@@ -40,6 +40,10 @@ describe WorkPackages::BaseContract do
   let(:member) do
     u = FactoryGirl.build_stubbed(:user)
 
+    allow(u)
+      .to receive(:allowed_to?)
+      .and_return(false)
+
     permissions.each do |permission|
       allow(u)
         .to receive(:allowed_to?)
@@ -66,11 +70,11 @@ describe WorkPackages::BaseContract do
 
   subject(:contract) { described_class.new(work_package, current_user) }
 
-  before do
-    allow(work_package).to receive(:changed).and_return(changed_values.map(&:to_s))
-  end
-
   shared_examples_for 'invalid if changed' do |attribute|
+    before do
+      allow(work_package).to receive(:changed).and_return(changed_values.map(&:to_s))
+    end
+
     before do
       contract.validate
     end
@@ -91,6 +95,10 @@ describe WorkPackages::BaseContract do
   end
 
   shared_examples 'a parent unwritable property' do |attribute|
+    before do
+      allow(work_package).to receive(:changed).and_return(changed_values.map(&:to_s))
+    end
+
     context 'is no parent' do
       before do
         allow(work_package)
@@ -139,10 +147,93 @@ describe WorkPackages::BaseContract do
 
   describe 'estimated hours' do
     it_behaves_like 'a parent unwritable property', :estimated_hours
+
+    let(:estimated_hours) { 1 }
+
+    before do
+      work_package.estimated_hours = estimated_hours
+
+      contract.validate
+    end
+
+    context '> 0' do
+      let(:estimated_hours) { 1 }
+
+      it 'is valid' do
+        expect(subject.errors.symbols_for(:estimated_hours))
+          .to be_empty
+      end
+    end
+
+    context '0' do
+      let(:estimated_hours) { 0 }
+
+      it 'is valid' do
+        expect(subject.errors.symbols_for(:estimated_hours))
+          .to be_empty
+      end
+    end
+
+    context 'nil' do
+      let(:estimated_hours) { nil }
+
+      it 'is valid' do
+        expect(subject.errors.symbols_for(:estimated_hours))
+          .to be_empty
+      end
+    end
+
+    context '< 0' do
+      let(:estimated_hours) { -1 }
+
+      it 'is invalid' do
+        expect(subject.errors.symbols_for(:estimated_hours))
+          .to match_array [:only_values_greater_or_equal_zeroes_allowed]
+      end
+    end
+  end
+
+  shared_examples_for 'a date attribute' do |attribute|
+    context 'a date' do
+      before do
+        work_package.send(:"#{attribute}=", Date.today)
+        contract.validate
+      end
+
+      it 'is valid' do
+        expect(subject.errors.symbols_for(attribute))
+          .to be_empty
+      end
+    end
+
+    context 'a string representing a date' do
+      before do
+        work_package.send(:"#{attribute}=", '01/01/17')
+        contract.validate
+      end
+
+      it 'is valid' do
+        expect(subject.errors.symbols_for(attribute))
+          .to be_empty
+      end
+    end
+
+    context 'not a date' do
+      before do
+        work_package.send(:"#{attribute}=", 'not a date')
+        contract.validate
+      end
+
+      it 'is invalid' do
+        expect(subject.errors.symbols_for(attribute))
+          .to match_array [:not_a_date]
+      end
+    end
   end
 
   describe 'start date' do
     it_behaves_like 'a parent unwritable property', :start_date
+    it_behaves_like 'a date attribute', :start_date
 
     context 'before soonest start date of parent' do
       before do
@@ -168,6 +259,7 @@ describe WorkPackages::BaseContract do
 
   describe 'due date' do
     it_behaves_like 'a parent unwritable property', :due_date
+    it_behaves_like 'a date attribute', :due_date
   end
 
   describe 'percentage done' do
@@ -253,6 +345,254 @@ describe WorkPackages::BaseContract do
         it 'is valid' do
           expect(subject.errors).to be_empty
         end
+      end
+    end
+  end
+
+  describe 'parent' do
+    let(:child) { FactoryGirl.build_stubbed(:stubbed_work_package) }
+
+    context 'the parent is a descendant' do
+      before do
+        work_package.parent = child
+        allow(work_package)
+          .to receive(:descendants)
+          .and_return([child])
+
+        subject.validate
+      end
+
+      it 'is invalid' do
+        expect(subject.errors.symbols_for(:parent))
+          .to match_array [:cant_link_a_work_package_with_a_descendant]
+      end
+    end
+  end
+
+  describe 'type' do
+    context 'disabled type' do
+      before do
+        allow(project)
+          .to receive(:types)
+          .and_return([])
+      end
+
+      describe 'not changing the type' do
+        it 'is valid' do
+          subject.validate
+
+          expect(subject)
+            .to be_valid
+        end
+      end
+
+      describe 'changing the type' do
+        let(:other_type) { FactoryGirl.build_stubbed(:type) }
+
+        it 'is invalid' do
+          work_package.type = other_type
+
+          subject.validate
+
+          expect(subject.errors.symbols_for(:type_id))
+            .to match_array [:inclusion]
+        end
+      end
+
+      describe 'changing the project (and that one not having the type)' do
+        let(:other_project) { FactoryGirl.build_stubbed(:project) }
+
+        it 'is invalid' do
+          work_package.project = other_project
+
+          subject.validate
+
+          expect(subject.errors.symbols_for(:type_id))
+            .to match_array [:inclusion]
+        end
+      end
+    end
+  end
+
+  describe 'category' do
+    let(:category) { FactoryGirl.build_stubbed(:category) }
+
+    context "one of the project's categories" do
+      before do
+        allow(project)
+          .to receive(:categories)
+          .and_return [category]
+
+        work_package.category = category
+
+        contract.validate
+      end
+
+      it 'is valid' do
+        expect(contract.errors.symbols_for(:category))
+          .to be_empty
+      end
+    end
+
+    context 'empty' do
+      before do
+        work_package.category = nil
+
+        contract.validate
+      end
+
+      it 'is valid' do
+        expect(contract.errors.symbols_for(:category))
+          .to be_empty
+      end
+    end
+
+    context 'inexistent category (e.g. removed)' do
+      before do
+        work_package.category_id = 5
+
+        contract.validate
+      end
+
+      it 'is invalid' do
+        expect(contract.errors.symbols_for(:category))
+          .to match_array [:does_not_exist]
+      end
+    end
+
+    context 'not of the project' do
+      before do
+        allow(project)
+          .to receive(:categories)
+          .and_return []
+
+        work_package.category = category
+
+        contract.validate
+      end
+
+      it 'is invalid' do
+        expect(contract.errors.symbols_for(:category))
+          .to match_array [:only_same_project_categories_allowed]
+      end
+    end
+  end
+
+  describe 'priority' do
+    let (:active_priority) { FactoryGirl.build_stubbed(:priority) }
+    let (:inactive_priority) { FactoryGirl.build_stubbed(:priority, active: false) }
+
+    context 'active priority' do
+      before do
+        work_package.priority = active_priority
+
+        contract.validate
+      end
+
+      it 'is valid' do
+        expect(contract.errors.symbols_for(:priority_id))
+          .to be_empty
+      end
+    end
+
+    context 'inactive priority' do
+      before do
+        work_package.priority = inactive_priority
+
+        contract.validate
+      end
+
+      it 'is invalid' do
+        expect(contract.errors.symbols_for(:priority_id))
+          .to match_array [:only_active_priorities_allowed]
+      end
+    end
+
+    context 'inactive priority but priority not changed' do
+      before do
+        work_package.priority = inactive_priority
+        work_package.clear_changes_information
+
+        contract.validate
+      end
+
+      it 'is valid' do
+        expect(contract.errors.symbols_for(:priority_id))
+          .to be_empty
+      end
+    end
+  end
+
+  describe 'status' do
+    let(:roles) { [FactoryGirl.build_stubbed(:role)] }
+    let(:valid_transition_result) { true }
+    let(:new_status) { FactoryGirl.build_stubbed(:status) }
+    let(:from_id) { work_package.status_id }
+    let(:to_id) { new_status.id }
+    let(:status_change) { work_package.status = new_status }
+
+    before do
+      allow(current_user)
+        .to receive(:roles)
+        .with(work_package.project)
+        .and_return(roles)
+
+      allow(type)
+        .to receive(:valid_transition?)
+        .with(from_id,
+              to_id,
+              roles)
+        .and_return(valid_transition_result)
+
+      status_change
+
+      contract.validate
+    end
+
+    context 'valid transition' do
+      it 'is valid' do
+        expect(subject.errors.symbols_for(:status_id))
+          .to be_empty
+      end
+    end
+
+    context 'invalid transition' do
+      let(:valid_transition_result) { false }
+
+      it 'is invalid' do
+        expect(subject.errors.symbols_for(:status_id))
+          .to match_array [:status_transition_invalid]
+      end
+    end
+
+    context 'does not exist' do
+      let(:status_change) { work_package.status_id = -1 }
+
+      it 'is invalid' do
+        expect(subject.errors.symbols_for(:status_id))
+          .to match_array [:does_not_exist]
+      end
+    end
+
+    context 'status is nil' do
+      let(:status_change) { work_package.status = nil }
+
+      it 'is invalid' do
+        expect(subject.errors.symbols_for(:status))
+          .to match_array [:blank]
+      end
+    end
+
+    context 'invalid transition but the type changed as well' do
+      let(:valid_transition_result) { false }
+      let(:status_change) do
+        work_package.status = new_status
+        work_package.type = FactoryGirl.build_stubbed(:type)
+      end
+
+      it 'is valid' do
+        expect(subject.errors.symbols_for(:status_id))
+          .to be_empty
       end
     end
   end

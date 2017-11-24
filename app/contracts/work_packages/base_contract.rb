@@ -98,13 +98,11 @@ module WorkPackages
                 model.leaf?
               }
 
-    validates :start_date, date: { allow_blank: true }
     validates :due_date,
               date: { after_or_equal_to: :start_date,
                       message: :greater_than_or_equal_to_start_date,
                       allow_blank: true },
               unless: Proc.new { |wp| wp.start_date.blank? }
-    validates :due_date, date: { allow_blank: true }
     validate :validate_enabled_type
 
     validate :validate_milestone_constraint
@@ -141,20 +139,6 @@ module WorkPackages
       if !model.estimated_hours.nil? && model.estimated_hours < 0
         errors.add :estimated_hours, :only_values_greater_or_equal_zeroes_allowed
       end
-    end
-
-    def status_changed?
-      model.status_id_was != 0 && model.status_id_changed?
-    end
-
-    def status_exists?
-      model.status_id && Status.where(id: status_id).exists?
-    end
-
-    def status_transition_exists?
-      model.type.valid_transition?(model.status_id_was,
-                                   model.status_id,
-                                   user.roles(model.project))
     end
 
     def validate_enabled_type
@@ -200,13 +184,19 @@ module WorkPackages
     end
 
     def validate_status_transition
-      if status_changed? && status_exists? && !(model.type_id_changed? || status_transition_exists?)
-        errors.add :status_id, :status_transition_invalid
-      end
+      return unless status_changed?
+
+      message = if !model.status
+                  :does_not_exist
+                elsif !(model.type_id_changed? || status_transition_exists?)
+                  :status_transition_invalid
+                end
+
+      errors.add(:status_id, message) if message
     end
 
     def validate_active_priority
-      if model.priority && !model.priority.active? && model.changes[:priority_id]
+      if model.priority && !model.priority.active? && model.priority_id_changed?
         errors.add :priority_id, :only_active_priorities_allowed
       end
     end
@@ -270,6 +260,20 @@ module WorkPackages
 
     def category_not_of_project?
       model.category && !model.project.categories.include?(model.category)
+    end
+
+    def status_changed?
+      model.status_id_was != 0 && model.status_id_changed?
+    end
+
+    def status_exists?
+      model.status_id && model.status
+    end
+
+    def status_transition_exists?
+      model.type.valid_transition?(model.status_id_was,
+                                   model.status_id,
+                                   user.roles(model.project))
     end
   end
 end
